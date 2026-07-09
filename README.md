@@ -1,8 +1,8 @@
-<<<<<<< HEAD
 # Generator Surat Warga (Otomatis via NIK)
 
-Aplikasi sederhana: ketik NIK, pilih jenis surat, klik satu tombol → surat langsung
-terisi otomatis dari data warga dan siap diunduh sebagai file Word.
+Aplikasi lokal (localhost) sederhana untuk perangkat desa: ketik NIK, pilih jenis
+surat, klik satu tombol → surat langsung terisi otomatis dari data warga,
+**nomor surat terisi otomatis dan berurutan**, lalu siap diunduh sebagai file Word.
 
 ## Isi folder
 
@@ -11,6 +11,7 @@ surat-generator/
 ├── app.py                      ← aplikasi utama (Streamlit)
 ├── requirements.txt            ← daftar library yang dibutuhkan
 ├── data_warga_contoh.xlsx      ← CONTOH data warga (ganti dengan data asli)
+├── riwayat_surat.csv           ← dibuat otomatis oleh aplikasi, jangan dihapus
 └── templates/
     ├── surat_pengantar.docx
     ├── surat_domisili.docx
@@ -38,9 +39,9 @@ berjalan lokal di komputer sendiri — data warga tidak terkirim ke internet.
 ## 3. Cara pakai
 
 1. Ketik NIK warga di kolom yang tersedia.
-2. Pilih jenis surat dari dropdown.
-3. Isi nomor surat & keperluan (opsional).
-4. Klik **"Cari & Buat Surat"**.
+2. Pilih jenis surat dari dropdown — nomor surat berikutnya otomatis muncul sebagai pratinjau.
+3. Isi keperluan (opsional).
+4. Klik **"Cari & Buat Surat"**. Nomor surat resmi baru dicatat ke riwayat saat tombol ini ditekan.
 5. Klik tombol download untuk mengunduh file `.docx` yang sudah terisi otomatis.
 6. Buka file itu di Word untuk cek sekali lagi, tanda tangan/stempel, lalu cetak.
 
@@ -75,7 +76,40 @@ Kalau data NIK sudah lama diketik sebagai Angka dan sudah rusak (ada digit yang
 jadi 0), NIK tersebut harus diketik ulang manual dari sumber aslinya (KTP/KK) —
 tidak bisa diperbaiki lewat aplikasi ini karena datanya sudah hilang di sumbernya.
 
-## 5. Menambah jenis surat baru
+## 5. Nomor surat otomatis & riwayat
+
+Aplikasi ini **membuat nomor surat sendiri secara berurutan**, tidak perlu diketik
+manual lagi. Cara kerjanya:
+
+- Setiap kali surat berhasil dibuat, nomornya dicatat ke file `riwayat_surat.csv`.
+- Nomor urut berikutnya otomatis dihitung dari baris terakhir di file tersebut,
+  lalu **reset ke 1 setiap kali masuk tahun baru**.
+- Format nomor default: `470/003/Ds/VII/2026` (urut/kode-jenis-surat/kode-desa/bulan-romawi/tahun).
+  Anda bisa lihat & ubah bagian riwayatnya lewat expander **"📜 Riwayat Nomor Surat
+  yang Sudah Dibuat"** di bagian bawah aplikasi.
+
+**Menyesuaikan formatnya:** kalau desa Anda punya format nomor surat sendiri
+(sesuai tata naskah dinas Kecamatan/Kabupaten setempat), buka `app.py` di bagian
+paling atas dan ubah tiga hal ini:
+
+```python
+KODE_SURAT = {
+    "Surat Pengantar": "474",
+    "Surat Keterangan Domisili": "470",
+    "Surat Keterangan Tidak Mampu": "460",
+}
+KODE_DESA = "Ds"  # ganti dengan kode/singkatan resmi desa Anda
+NOMOR_SURAT_FORMAT = "{urut}/{kode}/{desa}/{bulan_romawi}/{tahun}"
+```
+
+`NOMOR_SURAT_FORMAT` bisa disusun ulang sesuka Anda, tinggal pakai variabel
+`{urut}` `{kode}` `{desa}` `{bulan_romawi}` `{tahun}`.
+
+⚠️ **Jangan hapus atau edit manual file `riwayat_surat.csv`** kecuali Anda tahu
+persis apa yang dilakukan — dari file itulah aplikasi tahu nomor urut terakhir
+yang sudah dipakai, supaya tidak ada nomor surat yang dobel.
+
+## 6. Menambah jenis surat baru
 
 1. Buka salah satu file di `templates/` sebagai contoh format.
 2. Duplikat, ubah judul & isi kalimatnya sesuai jenis surat baru, simpan dengan
@@ -90,7 +124,9 @@ tidak bisa diperbaiki lewat aplikasi ini karena datanya sudah hilang di sumberny
        "Surat Keterangan Usaha": "surat_keterangan_usaha.docx",   # <- baris baru
    }
    ```
-4. Simpan, jalankan ulang `streamlit run app.py`.
+4. (Opsional) tambahkan juga kode klasifikasinya di `KODE_SURAT` supaya nomor
+   suratnya punya kode yang sesuai.
+5. Simpan, jalankan ulang `streamlit run app.py`.
 
 Variabel yang tersedia untuk dipakai di template manapun (tulis persis dengan
 tanda kurung kurawal ganda di dalam file Word):
@@ -100,14 +136,14 @@ tanda kurung kurawal ganda di dalam file Word):
 `{{ pekerjaan }}` `{{ kewarganegaraan }}` `{{ nomor_surat }}` `{{ keperluan }}`
 `{{ tanggal_surat }}`
 
-## 6. Mengubah kop surat / kepala desa
+## 7. Mengubah kop surat / kepala desa
 
 Buka file `.docx` di folder `templates/` langsung dengan Microsoft Word, ganti
 teks `[NAMA KABUPATEN]`, `[NAMA KECAMATAN]`, `[NAMA DESA]`, `[Alamat Kantor Desa]`,
 dan `[Nama Terang Kepala Desa]` dengan data yang sebenarnya — cukup edit seperti
 dokumen Word biasa, lalu simpan. Placeholder `{{ ... }}` yang lain jangan disentuh.
 
-## 7. (Opsional) Ingin hasil langsung PDF?
+## 8. (Opsional) Ingin hasil langsung PDF?
 
 Install LibreOffice, lalu tambahkan baris ini di `app.py` setelah `doc.save(...)`
 pada file docx sementara, lalu konversi:
@@ -120,7 +156,7 @@ Ini memerlukan LibreOffice terpasang di komputer yang menjalankan aplikasi.
 Secara default aplikasi ini menghasilkan `.docx` agar staf desa masih bisa
 mengoreksi/menyesuaikan isi surat sebelum dicetak.
 
-## 8. Menjalankan untuk banyak pengguna sekaligus (opsional, lanjutan)
+## 9. Menjalankan untuk banyak pengguna sekaligus (opsional, lanjutan)
 
 Jika ingin diakses banyak staf sekaligus dari komputer masing-masing (bukan
 cuma satu komputer), aplikasi Streamlit ini bisa di-deploy ke:
@@ -128,9 +164,9 @@ cuma satu komputer), aplikasi Streamlit ini bisa di-deploy ke:
   data warga tidak terlalu sensitif untuk disimpan di cloud pihak ketiga, atau
 - Server lokal kantor desa/kecamatan yang bisa diakses lewat jaringan LAN kantor.
 
+Kalau dipakai banyak orang sekaligus dari komputer berbeda-beda, perhatikan bahwa
+`riwayat_surat.csv` harus berada di lokasi yang sama/ter-share, supaya nomor
+surat tetap berurutan dan tidak dobel antar pengguna.
+
 Untuk data kependudukan, disarankan berkonsultasi dengan Dinas Kominfo daerah
 mengenai kebijakan penyimpanan data yang sesuai sebelum deploy ke cloud publik.
-=======
-# generator-surat-warga
-Village Letter Generator is a localhost-based web application that helps village officials generate official citizen documents quickly and consistently. It automates letter creation using templates and citizen data, reducing manual work and improving administrative efficiency.
->>>>>>> 1a1f57358c19d55c98a1173e57de35cef71572e4
