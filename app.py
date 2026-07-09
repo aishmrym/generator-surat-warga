@@ -34,13 +34,14 @@ KODE_SURAT = {
 KODE_DESA = "Ds"  # ganti dengan singkatan/kode resmi desa Anda, misal "05" atau "SMJ"
 
 # Format nomor surat otomatis. Variabel yang tersedia untuk dipakai di sini:
+#   {kode}          -> kode klasifikasi jenis surat, diambil dari KODE_SURAT sesuai jenis surat
 #   {urut}          -> nomor urut berjalan, reset tiap tahun (001, 002, ...)
-#   {kode}          -> diambil dari KODE_SURAT sesuai jenis surat
-#   {desa}          -> diambil dari KODE_DESA di atas
-#   {bulan_romawi}  -> bulan saat ini dalam angka romawi (I - XII)
+#   {desa}          -> kode instansi/desa, diambil dari KODE_DESA di atas
+#   {bulan_romawi}  -> bulan saat ini dalam angka romawi (I - XII), kalau mau dipakai lagi
 #   {tahun}         -> tahun saat ini
-# Contoh umum di desa: 470/003/Ds/VII/2026
-NOMOR_SURAT_FORMAT = "{urut}/{kode}/{desa}/{bulan_romawi}/{tahun}"
+# Urutan: kode klasifikasi surat / nomor urut / kode instansi / tahun
+# Contoh: 470/003/Ds/2026
+NOMOR_SURAT_FORMAT = "{kode}/{urut}/{desa}/{tahun}"
 
 BULAN_ID = {
     1: "Januari", 2: "Februari", 3: "Maret", 4: "April", 5: "Mei", 6: "Juni",

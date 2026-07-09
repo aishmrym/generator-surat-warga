@@ -84,7 +84,7 @@ manual lagi. Cara kerjanya:
 - Setiap kali surat berhasil dibuat, nomornya dicatat ke file `riwayat_surat.csv`.
 - Nomor urut berikutnya otomatis dihitung dari baris terakhir di file tersebut,
   lalu **reset ke 1 setiap kali masuk tahun baru**.
-- Format nomor default: `470/003/Ds/VII/2026` (urut/kode-jenis-surat/kode-desa/bulan-romawi/tahun).
+- Format nomor default: `470/003/Ds/2026` (kode-jenis-surat/nomor-urut/kode-instansi/tahun).
   Anda bisa lihat & ubah bagian riwayatnya lewat expander **"📜 Riwayat Nomor Surat
   yang Sudah Dibuat"** di bagian bawah aplikasi.
 
@@ -99,11 +99,12 @@ KODE_SURAT = {
     "Surat Keterangan Tidak Mampu": "460",
 }
 KODE_DESA = "Ds"  # ganti dengan kode/singkatan resmi desa Anda
-NOMOR_SURAT_FORMAT = "{urut}/{kode}/{desa}/{bulan_romawi}/{tahun}"
+NOMOR_SURAT_FORMAT = "{kode}/{urut}/{desa}/{tahun}"
 ```
 
 `NOMOR_SURAT_FORMAT` bisa disusun ulang sesuka Anda, tinggal pakai variabel
-`{urut}` `{kode}` `{desa}` `{bulan_romawi}` `{tahun}`.
+`{kode}` `{urut}` `{desa}` `{bulan_romawi}` `{tahun}` (variabel `{bulan_romawi}`
+tersedia kalau sewaktu-waktu ingin ditambahkan lagi ke format).
 
 ⚠️ **Jangan hapus atau edit manual file `riwayat_surat.csv`** kecuali Anda tahu
 persis apa yang dilakukan — dari file itulah aplikasi tahu nomor urut terakhir
