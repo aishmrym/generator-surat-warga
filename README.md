@@ -1,55 +1,132 @@
 # Generator Surat Warga (Otomatis via NIK)
 
-Aplikasi lokal (localhost) sederhana untuk perangkat desa: ketik NIK, pilih jenis
-surat, klik satu tombol → surat langsung terisi otomatis dari data warga,
-**nomor surat terisi otomatis dan berurutan**, lalu siap diunduh sebagai file Word.
+Aplikasi lokal sederhana untuk perangkat desa: ketik NIK, pilih jenis surat, klik
+satu tombol, surat langsung terisi otomatis dari data warga, nomor surat otomatis
+& berurutan, lalu siap diunduh sebagai file Word.
+
+**Yang baru di versi ini:**
+- **Kelola Template Surat lewat aplikasi** (tanpa menyentuh kode). Tambah/hapus
+  jenis surat cukup lewat menu, template langsung muncul/hilang di dropdown.
+- **Penomoran per jenis surat.** Tiap template punya awalan nomornya sendiri
+  (mis. `470/`, `471/`), nomor urut berjalan terpisah per jenis dan reset tiap tahun.
+- **Riwayat bisa dihapus** dengan roll-back nomor yang cerdas (lihat bagian 6).
 
 ## Isi folder
 
 ```
 surat-generator/
-├── app.py                      ← aplikasi utama (Streamlit)
-├── requirements.txt            ← daftar library yang dibutuhkan
-├── data_warga_contoh.xlsx      ← CONTOH data warga (ganti dengan data asli)
-├── riwayat_surat.csv           ← dibuat otomatis oleh aplikasi, jangan dihapus
-└── templates/
-    ├── surat_pengantar.docx
-    ├── surat_domisili.docx
-    └── surat_tidak_mampu.docx
+├── app.py                    ← aplikasi utama (Streamlit), UI 3 menu
+├── template_store.py         ← registry template dinamis (baca/tulis templates.json)
+├── penomoran.py              ← penomoran per-template + riwayat + roll-back
+├── kunci_file.py             ← kunci antar-proses (tanpa dependency pihak ketiga)
+├── jalankan_aplikasi.bat     ← double-click untuk menjalankan (Windows)
+├── requirements.txt          ← daftar library yang dibutuhkan
+├── data_warga_contoh.xlsx    ← CONTOH data warga (ganti dengan data asli)
+├── templates.json            ← *dibuat otomatis* — daftar template & awalan nomornya
+├── riwayat_surat.json        ← *dibuat otomatis* — histori & counter nomor surat
+├── surat_terbit/             ← *dibuat otomatis* — salinan .docx tiap surat terbit
+├── .streamlit/
+│   ├── config.toml           ← kunci ke localhost + matikan telemetry (jangan dihapus)
+│   └── secrets.toml.example  ← salin jadi secrets.toml, isi kata sandi Anda
+└── templates/                ← file .docx template disimpan di sini (dikelola aplikasi)
 ```
 
 ## 1. Instalasi (sekali saja)
 
-Perlu Python 3.9+ sudah terpasang di komputer. Buka Command Prompt/Terminal di
-folder ini, lalu jalankan:
+Perlu Python 3.9+ ([python.org](https://python.org)).
 
+**Windows (pakai `jalankan_aplikasi.bat`):** lewati langkah ini, `.bat` akan
+mengecek Python & menginstall library otomatis saat pertama dijalankan.
+
+**Command line / Mac / Linux:**
 ```bash
 pip install -r requirements.txt
 ```
 
-## 2. Menjalankan aplikasi
+## 2. Atur kata sandi (sekali saja)
 
+```bash
+cp .streamlit/secrets.toml.example .streamlit/secrets.toml
+```
+Buka `.streamlit/secrets.toml`, ganti isinya dengan kata sandi pilihan Anda.
+**Jangan** kirim/upload file `secrets.toml` (tanpa `.example`) ke mana pun.
+
+## 3. Menjalankan aplikasi
+
+Double-click `jalankan_aplikasi.bat` (Windows), atau:
 ```bash
 streamlit run app.py
 ```
+Browser terbuka di `http://localhost:8501`, lalu diminta kata sandi. Aplikasi
+berjalan lokal & terkunci ke `127.0.0.1` — data warga tidak terkirim ke internet.
 
-Browser akan otomatis terbuka (biasanya di `http://localhost:8501`). Aplikasi ini
-berjalan lokal di komputer sendiri — data warga tidak terkirim ke internet.
+Ada tiga menu di sidebar: **Generate Surat**, **Kelola Template Surat**, dan
+**Riwayat Surat**.
 
-## 3. Cara pakai
+## 4. Kelola Template Surat (menu baru)
 
-1. Ketik NIK warga di kolom yang tersedia.
-2. Pilih jenis surat dari dropdown — nomor surat berikutnya otomatis muncul sebagai pratinjau.
+Semua jenis surat kini dibaca dinamis dari `templates.json`. Tidak ada lagi daftar
+template yang ditulis di dalam kode.
+
+**Menambah template:**
+1. Buka menu **🗂️ Kelola Template Surat**.
+2. Pada bagian **Tambah Template Baru**, isi:
+   - **Nama surat** (mis. `Surat Keterangan Usaha`) — ini yang muncul di dropdown.
+   - **Awalan nomor surat** (mis. `470/`) — awalan khusus jenis surat itu.
+   - **File template `.docx`** — unggah file Word berisi placeholder (lihat bawah).
+3. Klik **Simpan Template**. Template langsung tersedia di halaman Generate Surat.
+
+**Menghapus template:** klik **🗑️ Hapus** di sebelah nama template, lalu konfirmasi.
+File `.docx`-nya ikut terhapus dan template hilang dari dropdown. (Riwayat nomor
+yang sudah terlanjur terbit tetap tersimpan sebagai jejak.)
+
+**Placeholder yang tersedia** (tulis persis di dalam file Word, dengan kurung
+kurawal ganda):
+
+`{{ nik }}` `{{ nama }}` `{{ tempat_lahir }}` `{{ tanggal_lahir }}`
+`{{ jenis_kelamin }}` `{{ alamat }}` `{{ agama }}` `{{ status_perkawinan }}`
+`{{ pekerjaan }}` `{{ kewarganegaraan }}` `{{ nomor_surat }}` `{{ keperluan }}`
+`{{ tanggal_surat }}`
+
+> Catatan: karena template sudah dinamis, cara lama (mengedit dictionary `TEMPLATES`
+> di `app.py`) **tidak diperlukan lagi** dan sudah dihapus.
+
+## 5. Cara pakai (Generate Surat)
+
+1. Ketik NIK warga.
+2. Pilih jenis surat dari dropdown, kolom "Nomor Surat" langsung menampilkan
+   preview nomor berikutnya (belum resmi terpakai selama tombol belum diklik).
 3. Isi keperluan (opsional).
-4. Klik **"Cari & Buat Surat"**. Nomor surat resmi baru dicatat ke riwayat saat tombol ini ditekan.
-5. Klik tombol download untuk mengunduh file `.docx` yang sudah terisi otomatis.
-6. Buka file itu di Word untuk cek sekali lagi, tanda tangan/stempel, lalu cetak.
+4. Klik **Cari & Buat Surat**. Di titik ini nomor surat baru resmi tersimpan,
+   dan salinan `.docx`-nya ikut disimpan di folder `surat_terbit/`.
+5. Klik tombol download untuk mengunduh file `.docx`.
+6. Buka di Word untuk cek, tanda tangan/stempel, lalu cetak.
 
-## 4. WAJIB — Menggunakan data warga Anda sendiri
+## 6. Penomoran & Riwayat Surat
 
-Ganti isi `data_warga_contoh.xlsx` dengan data asli, **atau** ganti nama file
-tersebut di baris `DATA_PATH` pada `app.py`. Kolom yang harus ada persis sama
-namanya (huruf besar/kecil berpengaruh):
+**Format nomor:** `{awalan}{nomor urut}/{kode unit kerja}/{tahun}`, contoh
+`470/12/409.40.10/2026`.
+
+- **Awalan** diambil dari masing-masing template (diatur saat menambah template).
+- **Nomor urut** berjalan **terpisah per template** dan **reset ke 1 setiap tahun**.
+- **Kode unit kerja** (`409.40.10` default) diatur lewat `KODE_UNIT_KERJA` di awal
+  `app.py`, ganti dengan kode resmi instansi Anda.
+
+**Menghapus riwayat** (menu **📜 Riwayat Surat**, tombol 🗑️ Hapus):
+- Data riwayat terhapus, dan file surat hasil generate di `surat_terbit/` ikut terhapus.
+- Kalau yang dihapus adalah **nomor terakhir** pada jenis surat + tahun tersebut,
+  nomornya **di-roll-back** sehingga bisa dipakai ulang (berguna untuk salah input).
+- Kalau **bukan** yang terakhir, counter dibiarkan agar tidak terjadi duplikasi
+  nomor.
+
+Nomor tidak akan dobel meski beberapa staf klik "Buat Surat" nyaris bersamaan
+**di komputer yang sama** — dilindungi kunci file (`kunci_file.py`, tanpa dependency
+pihak ketiga). Batasan multi-komputer sama seperti versi sebelumnya (lihat bagian 8).
+
+## 7. Menggunakan data warga Anda sendiri
+
+Ganti isi `data_warga_contoh.xlsx` dengan data asli, atau ubah `DATA_PATH` di
+`app.py`. Kolom yang harus ada (persis, huruf besar/kecil berpengaruh):
 
 | Kolom | Contoh isi |
 |---|---|
@@ -64,110 +141,34 @@ namanya (huruf besar/kecil berpengaruh):
 | Pekerjaan | Wiraswasta |
 | Kewarganegaraan | WNI |
 
-**⚠️ PENTING soal kolom NIK:** NIK punya 16 digit, sedangkan Excel hanya akurat
-sampai 15 digit kalau kolomnya berformat Angka — digit terakhir bisa otomatis
-berubah jadi 0 tanpa disadari. Sebelum mengetik/menempel data NIK:
+**⚠️ Kolom NIK:** NIK 16 digit; Excel format Angka hanya akurat 15 digit (digit
+terakhir bisa jadi 0). Sebelum mengetik/menempel NIK: blok kolom NIK → klik kanan →
+**Format Cells** → **Text**, baru ketik/paste.
 
-1. Blok seluruh kolom NIK.
-2. Klik kanan → **Format Cells** → pilih **Text**.
-3. Baru ketik/paste NIK-nya.
+## 8. Keamanan (WAJIB DIBACA sebelum pakai data asli)
 
-Kalau data NIK sudah lama diketik sebagai Angka dan sudah rusak (ada digit yang
-jadi 0), NIK tersebut harus diketik ulang manual dari sumber aslinya (KTP/KK) —
-tidak bisa diperbaiki lewat aplikasi ini karena datanya sudah hilang di sumbernya.
+- **Dikunci ke localhost** lewat `.streamlit/config.toml` (`address = "127.0.0.1"`),
+  jadi tidak bisa diakses perangkat lain di jaringan yang sama.
+- **Gerbang kata sandi** lewat `.streamlit/secrets.toml` (lihat bagian 2).
+- **Telemetry Streamlit dimatikan** (`gatherUsageStats = false`).
+- "Localhost" **tidak** melindungi dari laptop dicuri, akun komputer tanpa password,
+  malware, atau sinkron cloud pribadi. Aktifkan enkripsi disk (BitLocker/FileVault),
+  password akun yang kuat, antivirus, dan jangan taruh folder ini di folder yang
+  tersinkron ke cloud pribadi.
 
-## 5. Nomor surat otomatis & riwayat
+**Batasan multi-komputer:** kunci file hanya berlaku untuk satu `riwayat_surat.json`
+di satu lokasi. Kalau dijalankan di beberapa komputer dengan salinan file terpisah,
+penomoran berjalan sendiri-sendiri dan bisa bentrok. Kalau perlu konsisten
+lintas-komputer, tetapkan satu "meja penomoran resmi", atau simpan `templates.json`
++ `riwayat_surat.json` + folder `templates/` & `surat_terbit/` di lokasi bersama
+(server file kantor), dan konsultasikan ke staf IT/Diskominfo mengingat sensitivitas
+data kependudukan.
 
-Aplikasi ini **membuat nomor surat sendiri secara berurutan**, tidak perlu diketik
-manual lagi. Cara kerjanya:
+## 9. (Opsional) Hasil langsung PDF
 
-- Setiap kali surat berhasil dibuat, nomornya dicatat ke file `riwayat_surat.csv`.
-- Nomor urut berikutnya otomatis dihitung dari baris terakhir di file tersebut,
-  lalu **reset ke 1 setiap kali masuk tahun baru**.
-- Format nomor default: `470/003/Ds/2026` (kode-jenis-surat/nomor-urut/kode-instansi/tahun).
-  Anda bisa lihat & ubah bagian riwayatnya lewat expander **"📜 Riwayat Nomor Surat
-  yang Sudah Dibuat"** di bagian bawah aplikasi.
-
-**Menyesuaikan formatnya:** kalau desa Anda punya format nomor surat sendiri
-(sesuai tata naskah dinas Kecamatan/Kabupaten setempat), buka `app.py` di bagian
-paling atas dan ubah tiga hal ini:
-
-```python
-KODE_SURAT = {
-    "Surat Pengantar": "474",
-    "Surat Keterangan Domisili": "470",
-    "Surat Keterangan Tidak Mampu": "460",
-}
-KODE_DESA = "Ds"  # ganti dengan kode/singkatan resmi desa Anda
-NOMOR_SURAT_FORMAT = "{kode}/{urut}/{desa}/{tahun}"
-```
-
-`NOMOR_SURAT_FORMAT` bisa disusun ulang sesuka Anda, tinggal pakai variabel
-`{kode}` `{urut}` `{desa}` `{bulan_romawi}` `{tahun}` (variabel `{bulan_romawi}`
-tersedia kalau sewaktu-waktu ingin ditambahkan lagi ke format).
-
-⚠️ **Jangan hapus atau edit manual file `riwayat_surat.csv`** kecuali Anda tahu
-persis apa yang dilakukan — dari file itulah aplikasi tahu nomor urut terakhir
-yang sudah dipakai, supaya tidak ada nomor surat yang dobel.
-
-## 6. Menambah jenis surat baru
-
-1. Buka salah satu file di `templates/` sebagai contoh format.
-2. Duplikat, ubah judul & isi kalimatnya sesuai jenis surat baru, simpan dengan
-   nama baru di folder `templates/`. Placeholder `{{ nama }}`, `{{ nik }}`, dst
-   jangan diubah namanya — itu yang otomatis diisi oleh aplikasi.
-3. Buka `app.py`, tambahkan satu baris di dictionary `TEMPLATES` (di bagian atas file):
-   ```python
-   TEMPLATES = {
-       "Surat Pengantar": "surat_pengantar.docx",
-       "Surat Keterangan Domisili": "surat_domisili.docx",
-       "Surat Keterangan Tidak Mampu": "surat_tidak_mampu.docx",
-       "Surat Keterangan Usaha": "surat_keterangan_usaha.docx",   # <- baris baru
-   }
-   ```
-4. (Opsional) tambahkan juga kode klasifikasinya di `KODE_SURAT` supaya nomor
-   suratnya punya kode yang sesuai.
-5. Simpan, jalankan ulang `streamlit run app.py`.
-
-Variabel yang tersedia untuk dipakai di template manapun (tulis persis dengan
-tanda kurung kurawal ganda di dalam file Word):
-
-`{{ nik }}` `{{ nama }}` `{{ tempat_lahir }}` `{{ tanggal_lahir }}`
-`{{ jenis_kelamin }}` `{{ alamat }}` `{{ agama }}` `{{ status_perkawinan }}`
-`{{ pekerjaan }}` `{{ kewarganegaraan }}` `{{ nomor_surat }}` `{{ keperluan }}`
-`{{ tanggal_surat }}`
-
-## 7. Mengubah kop surat / kepala desa
-
-Buka file `.docx` di folder `templates/` langsung dengan Microsoft Word, ganti
-teks `[NAMA KABUPATEN]`, `[NAMA KECAMATAN]`, `[NAMA DESA]`, `[Alamat Kantor Desa]`,
-dan `[Nama Terang Kepala Desa]` dengan data yang sebenarnya — cukup edit seperti
-dokumen Word biasa, lalu simpan. Placeholder `{{ ... }}` yang lain jangan disentuh.
-
-## 8. (Opsional) Ingin hasil langsung PDF?
-
-Install LibreOffice, lalu tambahkan baris ini di `app.py` setelah `doc.save(...)`
-pada file docx sementara, lalu konversi:
-
+Install LibreOffice, lalu konversi file `.docx`:
 ```bash
 soffice --headless --convert-to pdf nama_file.docx
 ```
-
-Ini memerlukan LibreOffice terpasang di komputer yang menjalankan aplikasi.
-Secara default aplikasi ini menghasilkan `.docx` agar staf desa masih bisa
-mengoreksi/menyesuaikan isi surat sebelum dicetak.
-
-## 9. Menjalankan untuk banyak pengguna sekaligus (opsional, lanjutan)
-
-Jika ingin diakses banyak staf sekaligus dari komputer masing-masing (bukan
-cuma satu komputer), aplikasi Streamlit ini bisa di-deploy ke:
-- **Streamlit Community Cloud** (gratis, https://streamlit.io/cloud) — cocok kalau
-  data warga tidak terlalu sensitif untuk disimpan di cloud pihak ketiga, atau
-- Server lokal kantor desa/kecamatan yang bisa diakses lewat jaringan LAN kantor.
-
-Kalau dipakai banyak orang sekaligus dari komputer berbeda-beda, perhatikan bahwa
-`riwayat_surat.csv` harus berada di lokasi yang sama/ter-share, supaya nomor
-surat tetap berurutan dan tidak dobel antar pengguna.
-
-Untuk data kependudukan, disarankan berkonsultasi dengan Dinas Kominfo daerah
-mengenai kebijakan penyimpanan data yang sesuai sebelum deploy ke cloud publik.
+Secara default aplikasi menghasilkan `.docx` agar staf masih bisa mengoreksi isi
+surat sebelum dicetak.

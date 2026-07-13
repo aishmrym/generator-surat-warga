@@ -6,54 +6,28 @@ import pandas as pd
 import streamlit as st
 from docxtpl import DocxTemplate
 
+import penomoran
+import template_store
+
 # ============================================================
 # KONFIGURASI — sesuaikan dengan kondisi kantor desa Anda
 # ============================================================
 DATA_PATH = "data_warga_contoh.xlsx"   # ganti dengan file data warga asli
-TEMPLATE_DIR = "templates"
-HISTORY_PATH = "riwayat_surat.csv"     # tempat nomor surat tersimpan otomatis
+KODE_UNIT_KERJA = "409.40.10"          # kode unit kerja/instansi, tampil di setiap nomor surat
+OUTPUT_DIR = "surat_terbit"            # tempat menyimpan salinan .docx yang diterbitkan
 
-# Tambah/kurangi baris di bawah ini untuk menambah jenis surat baru.
-# key   = nama yang muncul di dropdown
-# value = nama file .docx di folder templates/
-TEMPLATES = {
-    "Surat Pengantar": "surat_pengantar.docx",
-    "Surat Keterangan Domisili": "surat_domisili.docx",
-    "Surat Keterangan Tidak Mampu": "surat_tidak_mampu.docx",
-}
+# CATATAN: daftar jenis surat TIDAK lagi ditulis di sini. Semuanya dibaca dinamis
+# dari template_store (registry templates.json). Tambah/hapus template dilakukan
+# lewat menu "Kelola Template Surat" di aplikasi — kode ini tidak perlu disentuh.
 
-# Kode klasifikasi surat per jenis. Sesuaikan dengan pedoman tata naskah
-# dinas desa Anda (biasanya sudah ditentukan Kecamatan/Kabupaten).
-# Kalau belum tahu kodenya, boleh dikosongi/samakan dulu, tinggal edit di sini kapan saja.
-KODE_SURAT = {
-    "Surat Pengantar": "474",
-    "Surat Keterangan Domisili": "470",
-    "Surat Keterangan Tidak Mampu": "460",
-}
 
-KODE_DESA = "Ds"  # ganti dengan singkatan/kode resmi desa Anda, misal "05" atau "SMJ"
-
-# Format nomor surat otomatis. Variabel yang tersedia untuk dipakai di sini:
-#   {kode}          -> kode klasifikasi jenis surat, diambil dari KODE_SURAT sesuai jenis surat
-#   {urut}          -> nomor urut berjalan, reset tiap tahun (001, 002, ...)
-#   {desa}          -> kode instansi/desa, diambil dari KODE_DESA di atas
-#   {bulan_romawi}  -> bulan saat ini dalam angka romawi (I - XII), kalau mau dipakai lagi
-#   {tahun}         -> tahun saat ini
-# Urutan: kode klasifikasi surat / nomor urut / kode instansi / tahun
-# Contoh: 470/003/Ds/2026
-NOMOR_SURAT_FORMAT = "{kode}/{urut}/{desa}/{tahun}"
-
+# ============================================================
+# UTIL TANGGAL & DATA WARGA
+# ============================================================
 BULAN_ID = {
     1: "Januari", 2: "Februari", 3: "Maret", 4: "April", 5: "Mei", 6: "Juni",
     7: "Juli", 8: "Agustus", 9: "September", 10: "Oktober", 11: "November", 12: "Desember",
 }
-
-BULAN_ROMAWI = {
-    1: "I", 2: "II", 3: "III", 4: "IV", 5: "V", 6: "VI",
-    7: "VII", 8: "VIII", 9: "IX", 10: "X", 11: "XI", 12: "XII",
-}
-
-HISTORY_COLUMNS = ["urut", "nomor_surat", "jenis_surat", "nik", "nama", "tahun", "tanggal_dibuat"]
 
 
 def format_tanggal_indo(nilai) -> str:
@@ -75,109 +49,9 @@ def load_data():
     return df
 
 
-# ------------------------------------------------------------
-# Nomor surat otomatis + riwayat
-# ------------------------------------------------------------
-def load_riwayat() -> pd.DataFrame:
-    """Baca riwayat nomor surat yang pernah dibuat. Kalau belum ada file, mulai kosong."""
-    if os.path.exists(HISTORY_PATH):
-        return pd.read_csv(HISTORY_PATH, dtype={"nik": str})
-    return pd.DataFrame(columns=HISTORY_COLUMNS)
-
-
-def urut_berikutnya(riwayat: pd.DataFrame, tahun_ini: int) -> int:
-    """Nomor urut berjalan; reset ke 1 tiap kali ganti tahun."""
-    if riwayat.empty:
-        return 1
-    riwayat_tahun_ini = riwayat[riwayat["tahun"] == tahun_ini]
-    if riwayat_tahun_ini.empty:
-        return 1
-    return int(riwayat_tahun_ini["urut"].max()) + 1
-
-
-def buat_nomor_surat(jenis_surat: str, riwayat: pd.DataFrame):
-    """Hitung nomor urut & nomor surat berikutnya (belum disimpan ke riwayat)."""
-    sekarang = datetime.now()
-    urut = urut_berikutnya(riwayat, sekarang.year)
-    nomor = NOMOR_SURAT_FORMAT.format(
-        urut=str(urut).zfill(3),
-        kode=KODE_SURAT.get(jenis_surat, "000"),
-        desa=KODE_DESA,
-        bulan_romawi=BULAN_ROMAWI[sekarang.month],
-        tahun=sekarang.year,
-    )
-    return urut, nomor
-
-
-def simpan_riwayat(riwayat: pd.DataFrame, urut: int, nomor: str, jenis_surat: str, nik: str, nama: str) -> pd.DataFrame:
-    """Catat nomor surat yang baru saja dipakai supaya nomor berikutnya lanjut otomatis."""
-    baris_baru = pd.DataFrame([{
-        "urut": urut,
-        "nomor_surat": nomor,
-        "jenis_surat": jenis_surat,
-        "nik": nik,
-        "nama": nama,
-        "tahun": datetime.now().year,
-        "tanggal_dibuat": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
-    }])
-    riwayat_baru = pd.concat([riwayat, baris_baru], ignore_index=True)
-    riwayat_baru.to_csv(HISTORY_PATH, index=False)
-    return riwayat_baru
-
-
-# ============================================================
-# UI
-# ============================================================
-st.set_page_config(page_title="Generator Surat Warga", page_icon="📄", layout="centered")
-st.title("📄 Generator Surat Warga")
-st.caption("Input NIK, pilih jenis surat, dokumen otomatis terisi dari data warga — nomor surat juga otomatis berurutan.")
-
-if not os.path.exists(DATA_PATH):
-    st.error(f"File data '{DATA_PATH}' tidak ditemukan. Letakkan di folder yang sama dengan app.py.")
-    st.stop()
-
-df = load_data()
-riwayat = load_riwayat()
-
-with st.expander("🔍 Lihat seluruh data warga"):
-    st.dataframe(df, use_container_width=True)
-
-col1, col2 = st.columns(2)
-with col1:
-    nik_input = st.text_input("Masukkan NIK", max_chars=16, placeholder="16 digit angka")
-with col2:
-    jenis_surat = st.selectbox("Pilih Jenis Surat", list(TEMPLATES.keys()))
-
-# Preview nomor surat yang AKAN dipakai — belum tercatat di riwayat sampai
-# tombol "Cari & Buat Surat" benar-benar ditekan.
-urut_preview, nomor_preview = buat_nomor_surat(jenis_surat, riwayat)
-st.info(f"Nomor surat yang akan digunakan: **{nomor_preview}**  \n"
-        f"(otomatis, urutan ke-{urut_preview} tahun {datetime.now().year})")
-
-keperluan = st.text_input("Keperluan", placeholder="contoh: persyaratan melamar kerja")
-
-if st.button("🔎 Cari & Buat Surat", type="primary", use_container_width=True):
-    nik = nik_input.strip()
-
-    if not nik:
-        st.warning("NIK belum diisi.")
-        st.stop()
-
-    hasil = df[df["NIK"] == nik]
-
-    if hasil.empty:
-        st.error(f"NIK **{nik}** tidak ditemukan di database. Periksa kembali angkanya.")
-        st.stop()
-
-    data = hasil.iloc[0].to_dict()
-    st.success(f"Data ditemukan: **{data['Nama']}**")
-
-    # Hitung ulang nomor surat tepat sebelum dipakai, supaya kalau ada surat lain
-    # yang dibuat orang lain di antara preview & klik tombol ini, nomornya tetap benar.
-    riwayat = load_riwayat()
-    urut, nomor_surat = buat_nomor_surat(jenis_surat, riwayat)
-
-    context = {
+def bangun_context(data: dict, nomor_surat: str, keperluan: str) -> dict:
+    """Susun variabel yang bisa dipakai di dalam template .docx."""
+    return {
         "nik": data.get("NIK", ""),
         "nama": data.get("Nama", ""),
         "tempat_lahir": data.get("Tempat Lahir", ""),
@@ -193,54 +67,302 @@ if st.button("🔎 Cari & Buat Surat", type="primary", use_container_width=True)
         "tanggal_surat": format_tanggal_indo(datetime.now()),
     }
 
-    template_path = os.path.join(TEMPLATE_DIR, TEMPLATES[jenis_surat])
-    doc = DocxTemplate(template_path)
-    doc.render(context)
 
+def render_surat(template: dict, context: dict) -> bytes:
+    """Render template .docx dengan context, kembalikan bytes hasilnya."""
+    doc = DocxTemplate(template_store.path_file(template))
+    doc.render(context)
     buffer = io.BytesIO()
     doc.save(buffer)
     buffer.seek(0)
+    return buffer.getvalue()
 
-    # Baru catat ke riwayat setelah dokumen berhasil dibuat, supaya nomor
-    # berikutnya otomatis lanjut dari sini.
-    riwayat = simpan_riwayat(riwayat, urut, nomor_surat, jenis_surat, data["NIK"], data["Nama"])
 
-    nama_file = f"{jenis_surat.replace(' ', '_')}_{data['NIK']}.docx"
-    st.download_button(
-        label=f"⬇️ Download Surat (.docx) — Nomor {nomor_surat}",
-        data=buffer,
-        file_name=nama_file,
-        mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
-        use_container_width=True,
+# ============================================================
+# GERBANG KATA SANDI
+# ============================================================
+def cek_kata_sandi() -> bool:
+    """Gerbang kata sandi sederhana sebelum data warga bisa diakses.
+
+    Kata sandi TIDAK ditulis di file ini. Diatur lewat .streamlit/secrets.toml
+    (lihat .streamlit/secrets.toml.example), supaya tidak ikut ter-share kalau
+    folder ini disalin/dikirim ke orang lain.
+    """
+    if st.session_state.get("terautentikasi"):
+        return True
+
+    try:
+        sandi_benar = st.secrets.get("app_password")
+    except Exception:
+        sandi_benar = None
+
+    st.title("🔒 Generator Surat Warga")
+
+    if not sandi_benar:
+        st.warning(
+            "Kata sandi akses belum diatur. Salin `.streamlit/secrets.toml.example` "
+            "menjadi `.streamlit/secrets.toml`, isi `app_password` dengan kata sandi "
+            "Anda sendiri, lalu jalankan ulang aplikasinya."
+        )
+        return False
+
+    def sandi_dimasukkan():
+        if st.session_state.get("sandi_input") == sandi_benar:
+            st.session_state["terautentikasi"] = True
+        else:
+            st.session_state["sandi_salah"] = True
+
+    st.text_input(
+        "Masukkan kata sandi akses", type="password",
+        key="sandi_input", on_change=sandi_dimasukkan,
+    )
+    if st.session_state.get("sandi_salah"):
+        st.error("Kata sandi salah.")
+    return False
+
+
+# ============================================================
+# HALAMAN: GENERATE SURAT
+# ============================================================
+def halaman_generate():
+    st.title("📄 Generator Surat Warga")
+    st.caption("Input NIK, pilih jenis surat, dokumen otomatis terisi dari data warga.")
+
+    if not os.path.exists(DATA_PATH):
+        st.error(f"File data '{DATA_PATH}' tidak ditemukan. Letakkan di folder yang sama dengan app.py.")
+        return
+
+    templates = template_store.daftar_template()
+    if not templates:
+        st.info(
+            "Belum ada template surat. Buka menu **🗂️ Kelola Template Surat** "
+            "di sidebar untuk menambahkan template pertama Anda."
+        )
+        return
+
+    df = load_data()
+    st.caption(
+        f"📇 {len(df)} data warga termuat. Cari satu per satu lewat NIK di bawah — "
+        "bukan lewat tabel, demi keamanan data."
     )
 
-st.divider()
+    peta = {t["nama"]: t for t in templates}
 
-with st.expander("📜 Riwayat Nomor Surat yang Sudah Dibuat"):
-    riwayat_terbaru = load_riwayat()
-    if riwayat_terbaru.empty:
-        st.caption("Belum ada surat yang dibuat.")
-    else:
-        st.dataframe(
-            riwayat_terbaru.sort_values("urut", ascending=False),
+    col1, col2 = st.columns(2)
+    with col1:
+        nik_input = st.text_input("Masukkan NIK", max_chars=16, placeholder="16 digit angka")
+    with col2:
+        nama_jenis = st.selectbox("Pilih Jenis Surat", list(peta.keys()))
+
+    template_terpilih = peta[nama_jenis]
+
+    st.text_input(
+        "Nomor Surat (otomatis)",
+        value=penomoran.lihat_nomor_berikutnya(template_terpilih, KODE_UNIT_KERJA),
+        disabled=True,
+        help="Nomor ini didapat otomatis dari histori penomoran & baru resmi tersimpan "
+             "setelah tombol 'Cari & Buat Surat' di bawah diklik.",
+    )
+    keperluan = st.text_input("Keperluan", placeholder="contoh: persyaratan melamar kerja")
+
+    if st.button("🔎 Cari & Buat Surat", type="primary", use_container_width=True):
+        nik = nik_input.strip()
+        if not nik:
+            st.warning("NIK belum diisi.")
+            return
+
+        hasil = df[df["NIK"] == nik]
+        if hasil.empty:
+            st.error(f"NIK **{nik}** tidak ditemukan di database. Periksa kembali angkanya.")
+            return
+
+        data = hasil.iloc[0].to_dict()
+        st.success(f"Data ditemukan: **{data['Nama']}**")
+
+        # Nama file salinan yang akan disimpan permanen
+        stamp = datetime.now().strftime("%Y%m%d%H%M%S")
+        nama_file = f"{template_terpilih['id']}_{data['NIK']}_{stamp}.docx"
+
+        # Terbitkan nomor resmi (counter naik + tercatat di riwayat)
+        record = penomoran.terbitkan_nomor(
+            template_terpilih, KODE_UNIT_KERJA,
+            nik=data.get("NIK", ""), nama=data.get("Nama", ""),
+            keperluan=keperluan, nama_file=nama_file,
+        )
+        nomor_surat = record["nomor_surat"]
+        st.info(f"Nomor surat yang diterbitkan: **{nomor_surat}**")
+
+        context = bangun_context(data, nomor_surat, keperluan)
+        isi_docx = render_surat(template_terpilih, context)
+
+        # Simpan salinan permanen supaya bisa ikut terhapus saat riwayat dihapus
+        os.makedirs(OUTPUT_DIR, exist_ok=True)
+        with open(os.path.join(OUTPUT_DIR, nama_file), "wb") as f:
+            f.write(isi_docx)
+
+        st.download_button(
+            label="⬇️ Download Surat (.docx)",
+            data=isi_docx,
+            file_name=nama_file,
+            mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
             use_container_width=True,
-            hide_index=True,
-        )
-        st.caption(
-            f"File riwayat tersimpan di `{HISTORY_PATH}` — jangan dihapus, karena dari situ "
-            "aplikasi tahu nomor urut terakhir yang sudah dipakai."
         )
 
-with st.expander("➕ Cara menambah jenis surat baru"):
-    st.markdown(
-        """
-        1. Buat file `.docx` baru di folder `templates/`, isi dengan format surat yang diinginkan.
-        2. Di dalam file itu, tulis placeholder `{{ nama }}`, `{{ nik }}`, `{{ alamat }}`, dst
-           di posisi yang sesuai (lihat daftar variabel yang tersedia di README).
-        3. Tambahkan satu baris baru di dictionary `TEMPLATES` pada awal file `app.py`, contoh:
-           `"Surat Keterangan Usaha": "surat_keterangan_usaha.docx"`
-        4. (Opsional) Tambahkan juga kode klasifikasinya di dictionary `KODE_SURAT` supaya
-           nomor suratnya punya kode yang sesuai.
-        5. Simpan, lalu jalankan ulang aplikasinya.
-        """
+
+# ============================================================
+# HALAMAN: KELOLA TEMPLATE SURAT
+# ============================================================
+def halaman_kelola_template():
+    st.title("🗂️ Kelola Template Surat")
+    st.caption(
+        "Tambah atau hapus jenis surat tanpa mengubah kode program. Perubahan "
+        "langsung tampil di dropdown pada halaman Generate Surat."
     )
+
+    # ---- Daftar template yang sudah ada ----
+    st.subheader("Daftar Template")
+    templates = template_store.daftar_template()
+    if not templates:
+        st.info("Belum ada template. Tambahkan lewat form di bawah.")
+    else:
+        for t in templates:
+            c1, c2, c3 = st.columns([4, 2, 1])
+            c1.markdown(f"**{t['nama']}**  \n`{t['file']}`")
+            c2.markdown(f"Awalan nomor:  \n**{t['prefix'] or '(tanpa awalan)'}**")
+
+            konfirmasi_key = f"konfirmasi_hapus_{t['id']}"
+            if c3.button("🗑️ Hapus", key=f"hapus_{t['id']}", use_container_width=True):
+                st.session_state[konfirmasi_key] = True
+
+            if st.session_state.get(konfirmasi_key):
+                st.warning(f"Yakin hapus template **{t['nama']}**? File .docx-nya ikut terhapus.")
+                k1, k2 = st.columns(2)
+                if k1.button("Ya, hapus", key=f"ya_{t['id']}", type="primary", use_container_width=True):
+                    template_store.hapus_template(t["id"])
+                    st.session_state.pop(konfirmasi_key, None)
+                    st.success(f"Template '{t['nama']}' dihapus.")
+                    st.rerun()
+                if k2.button("Batal", key=f"batal_{t['id']}", use_container_width=True):
+                    st.session_state.pop(konfirmasi_key, None)
+                    st.rerun()
+            st.divider()
+
+    # ---- Form tambah template ----
+    st.subheader("➕ Tambah Template Baru")
+    with st.form("form_tambah_template", clear_on_submit=True):
+        nama_baru = st.text_input(
+            "Nama surat",
+            placeholder="contoh: Surat Keterangan Usaha",
+        )
+        prefix_baru = st.text_input(
+            "Awalan nomor surat",
+            placeholder="contoh: 470/",
+            help="Awalan khusus jenis surat ini. Nomor urut & tahun ditambahkan "
+                 "otomatis di belakangnya, mis. '470/12/409.40.10/2026'.",
+        )
+        file_baru = st.file_uploader("File template (.docx)", type=["docx"])
+        submit = st.form_submit_button("Simpan Template", type="primary", use_container_width=True)
+
+        if submit:
+            try:
+                isi = file_baru.read() if file_baru is not None else None
+                template = template_store.tambah_template(nama_baru, prefix_baru, isi)
+                st.success(
+                    f"Template **{template['nama']}** ditambahkan dan langsung tersedia "
+                    "di halaman Generate Surat."
+                )
+                st.rerun()
+            except ValueError as e:
+                st.error(str(e))
+
+    with st.expander("ℹ️ Variabel yang bisa dipakai di dalam file .docx"):
+        st.markdown(
+            """
+            Tulis placeholder ini persis (dengan kurung kurawal ganda) di dalam file Word,
+            aplikasi akan mengisinya otomatis:
+
+            `{{ nik }}` `{{ nama }}` `{{ tempat_lahir }}` `{{ tanggal_lahir }}`
+            `{{ jenis_kelamin }}` `{{ alamat }}` `{{ agama }}` `{{ status_perkawinan }}`
+            `{{ pekerjaan }}` `{{ kewarganegaraan }}` `{{ nomor_surat }}` `{{ keperluan }}`
+            `{{ tanggal_surat }}`
+            """
+        )
+
+
+# ============================================================
+# HALAMAN: RIWAYAT SURAT
+# ============================================================
+def halaman_riwayat():
+    st.title("📜 Riwayat Surat")
+    st.caption(
+        "Daftar nomor surat yang sudah diterbitkan. Menghapus riwayat juga menghapus "
+        "file surat hasil generate, dan me-roll-back nomor bila itu nomor terakhir."
+    )
+
+    riwayat = penomoran.daftar_riwayat()
+    if not riwayat:
+        st.info("Belum ada surat yang diterbitkan.")
+        return
+
+    for r in riwayat:
+        record_id = f"{r.get('nomor_surat')}||{r.get('dibuat_pada')}"
+        c1, c2 = st.columns([5, 1])
+        with c1:
+            st.markdown(
+                f"**{r['nomor_surat']}** — {r.get('jenis_surat', '')}  \n"
+                f"{r.get('nama', '')} · NIK {r.get('nik', '')}  \n"
+                f"🕒 {r.get('dibuat_pada', '')}"
+            )
+        konfirmasi_key = f"konfirmasi_hapus_riwayat_{record_id}"
+        if c2.button("🗑️ Hapus", key=f"hapus_r_{record_id}", use_container_width=True):
+            st.session_state[konfirmasi_key] = True
+
+        if st.session_state.get(konfirmasi_key):
+            st.warning(
+                f"Hapus riwayat **{r['nomor_surat']}**? File suratnya ikut terhapus. "
+                "Kalau ini nomor terakhir pada jenis surat & tahun tsb, nomornya bisa dipakai lagi."
+            )
+            k1, k2 = st.columns(2)
+            if k1.button("Ya, hapus", key=f"ya_r_{record_id}", type="primary", use_container_width=True):
+                hasil = penomoran.hapus_riwayat(record_id, folder_output=OUTPUT_DIR)
+                st.session_state.pop(konfirmasi_key, None)
+                if hasil["terhapus"]:
+                    pesan = "Riwayat dihapus."
+                    if hasil["rollback"]:
+                        pesan += " Nomor terakhir di-roll-back dan bisa dipakai ulang."
+                    if hasil["file_terhapus"]:
+                        pesan += " File surat ikut terhapus."
+                    st.success(pesan)
+                else:
+                    st.error("Riwayat tidak ditemukan (mungkin sudah terhapus).")
+                st.rerun()
+            if k2.button("Batal", key=f"batal_r_{record_id}", use_container_width=True):
+                st.session_state.pop(konfirmasi_key, None)
+                st.rerun()
+        st.divider()
+
+
+# ============================================================
+# ENTRY POINT
+# ============================================================
+def main():
+    st.set_page_config(page_title="Generator Surat Warga", page_icon="📄", layout="centered")
+
+    if not cek_kata_sandi():
+        st.stop()
+
+    halaman = st.sidebar.radio(
+        "Menu",
+        ["📄 Generate Surat", "🗂️ Kelola Template Surat", "📜 Riwayat Surat"],
+    )
+
+    if halaman == "📄 Generate Surat":
+        halaman_generate()
+    elif halaman == "🗂️ Kelola Template Surat":
+        halaman_kelola_template()
+    else:
+        halaman_riwayat()
+
+
+if __name__ == "__main__":
+    main()
