@@ -4,6 +4,10 @@ Semua jenis surat, file .docx-nya, dan awalan nomor suratnya disimpan di satu
 file JSON (`templates.json`). Perangkat desa cukup menambah/menghapus template
 lewat UI, kode program tidak perlu disentuh sama sekali.
 
+Saat pertama kali dijalankan (templates.json belum ada), TEMPLATE BAWAAN yang
+file .docx-nya sudah tersedia di folder templates/ otomatis didaftarkan lewat
+fungsi seed_template_bawaan(), sehingga template lama tidak perlu di-upload ulang.
+
 Struktur file `templates.json`:
 {
   "templates": [
@@ -11,7 +15,7 @@ Struktur file `templates.json`:
       "id": "surat_pengantar",          # id unik & stabil (dipakai counter penomoran)
       "nama": "Surat Pengantar",         # nama yang tampil di dropdown
       "file": "surat_pengantar.docx",    # nama file di folder templates/
-      "prefix": "470/"                   # awalan nomor surat khusus jenis ini
+      "prefix": "440/"                   # awalan nomor surat khusus jenis ini
     },
     ...
   ]
@@ -29,6 +33,21 @@ from kunci_file import KunciFile
 
 TEMPLATE_DIR = "templates"
 REGISTRY_PATH = "templates.json"
+
+# ------------------------------------------------------------------
+# TEMPLATE BAWAAN
+# Didaftarkan otomatis saat pertama kali aplikasi jalan (templates.json belum ada).
+# Syaratnya: file .docx-nya memang sudah ada di folder templates/.
+# Untuk mengubah awalan nomor bawaan, cukup ganti "prefix" di sini.
+# ------------------------------------------------------------------
+TEMPLATE_BAWAAN = [
+    {"id": "surat_pengantar", "nama": "Surat Pengantar",
+     "file": "surat_pengantar.docx", "prefix": "440/"},
+    {"id": "surat_domisili", "nama": "Surat Keterangan Domisili",
+     "file": "surat_domisili.docx", "prefix": "470/"},
+    {"id": "surat_tidak_mampu", "nama": "Surat Keterangan Tidak Mampu",
+     "file": "surat_tidak_mampu.docx", "prefix": "470/"},
+]
 
 
 # ------------------------------------------------------------------
@@ -80,6 +99,34 @@ def _id_unik(nama: str, data: dict) -> str:
 def normalisasi_prefix(prefix: str) -> str:
     """Rapikan awalan nomor surat. Kosong dibolehkan (berarti tanpa awalan)."""
     return (prefix or "").strip()
+
+
+# ------------------------------------------------------------------
+# SEEDING TEMPLATE BAWAAN
+# ------------------------------------------------------------------
+def seed_template_bawaan() -> None:
+    """Daftarkan template bawaan saat registry masih kosong / belum ada.
+
+    Dipanggil sekali di awal aplikasi. Aman dipanggil berkali-kali: kalau
+    templates.json sudah ada, fungsi ini tidak melakukan apa-apa (tidak menimpa
+    perubahan yang sudah dibuat perangkat desa). Hanya mendaftarkan template
+    bawaan yang file .docx-nya benar-benar ada di folder templates/.
+    """
+    if os.path.exists(REGISTRY_PATH):
+        return  # registry sudah pernah dibuat; jangan ganggu isinya
+
+    terdaftar = []
+    for t in TEMPLATE_BAWAAN:
+        if os.path.exists(os.path.join(TEMPLATE_DIR, t["file"])):
+            terdaftar.append({
+                "id": t["id"],
+                "nama": t["nama"],
+                "file": t["file"],
+                "prefix": normalisasi_prefix(t["prefix"]),
+            })
+
+    # Tetap tulis file (walau kosong) supaya seeding tidak diulang tiap refresh.
+    _simpan({"templates": terdaftar})
 
 
 # ------------------------------------------------------------------

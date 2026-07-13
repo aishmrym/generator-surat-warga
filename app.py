@@ -351,6 +351,10 @@ def main():
     if not cek_kata_sandi():
         st.stop()
 
+    # Daftarkan template bawaan (Surat Pengantar/Domisili/Tidak Mampu) otomatis
+    # saat pertama kali jalan, supaya langsung tersedia tanpa upload ulang.
+    template_store.seed_template_bawaan()
+
     halaman = st.sidebar.radio(
         "Menu",
         ["📄 Generate Surat", "🗂️ Kelola Template Surat", "📜 Riwayat Surat"],
